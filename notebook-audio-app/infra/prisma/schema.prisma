@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  sources     Source[]
+  messages    Message[]
+  generations Generation[]
+  templates   Template[]
+  chunks      Chunk[]
+}
+
+model Source {
+  id            String     @id @default(cuid())
+  projectId     String
+  project       Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type          SourceType
+  title         String
+  url           String?
+  content       String?    @db.Text
+  extractedText String?    @db.Text
+  thumbnailUrl  String?
+  faviconUrl    String?
+  fileUrl       String?
+  fileSize      Int?
+  mimeType      String?
+  metadata      Json?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  chunks        Chunk[]
+  messages      Message[]  @relation("MessageSources")
+
+  @@index([projectId])
+}
+
+model Chunk {
+  id        String   @id @default(cuid())
+  sourceId  String
+  source    Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  text      String   @db.Text
+  index     Int
+  embedding Unsupported("vector(1536)")?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([sourceId])
+  @@index([projectId])
+}
+
+model Message {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  role          MessageRole
+  content       String   @db.Text
+  usedSourceIds String[]
+  citations     Json?
+  createdAt     DateTime @default(now())
+  sources       Source[] @relation("MessageSources")
+
+  @@index([projectId])
+  @@index([createdAt])
+}
+
+model Generation {
+  id          String           @id @default(cuid())
+  projectId   String
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type        GenerationType
+  title       String
+  status      GenerationStatus @default(pending)
+  settings    Json
+  result      Json?
+  assets      Json?
+  metadata    Json?
+  rating      Json?
+  parentId    String?
+  error       String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([projectId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Template {
+  id             String   @id @default(cuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  generationType String
+  name           String
+  instructions   String   @db.Text
+  systemPrompt   String   @db.Text
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([projectId, generationType])
+  @@index([projectId])
+}
+
+model JobQueue {
+  id        String   @id @default(cuid())
+  name      String
+  data      Json
+  opts      Json?
+  progress  Int      @default(0)
+  attempts  Int      @default(0)
+  maxAttempts Int    @default(3)
+  delay     Int      @default(0)
+  priority  Int      @default(0)
+  status    JobStatus @default(waiting)
+  result    Json?
+  error     String?
+  processedAt DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name, status])
+  @@index([priority, createdAt])
+}
+
+enum SourceType {
+  pdf
+  audio
+  image
+  website
+  youtube
+  copied_text
+}
+
+enum GenerationType {
+  audio_overview
+  video_overview
+  flashcards
+  quiz
+  infographic
+  slide_deck
+}
+
+enum GenerationStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+enum MessageRole {
+  user
+  assistant
+}
+
+enum JobStatus {
+  waiting
+  active
+  completed
+  failed
+  delayed
+}
